@@ -35,7 +35,7 @@ from xdl.python.framework.session import Session, Hook
 '''
 from xdl.python.ops.ps_ops import *
 from xdl.python.framework.gradient import def_gradient, def_gradient_internal, gradient, get_sparse_grads
-from xdl.python.framework.variable import Variable, trainable_variables, global_variables, global_initializers, variable_registers, get_variable_by_name
+from xdl.python.framework.variable import Variable, trainable_variables, global_variables, global_initializers, variable_registers, get_variable_by_name, get_variable_by_prefix
 from xdl.python.sparse_engine.embedding import embedding, merged_embedding
 from xdl.python.training.gradient_utils import get_gradient, get_gradients
 from xdl.python.ops.init_ops import *
