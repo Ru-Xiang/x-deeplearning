@@ -85,6 +85,8 @@ def train(is_training=True):
         data_io.batch_size(intconf('train_batch_size'))
         data_io.epochs(intconf('train_epochs'))
         data_io.threads(intconf('train_threads'))
+        tdmop_layer_counts = [int(i) for i in conf('tdmop_layer_counts').split(',')]
+        data_io.sgroup_queue_capacity(intconf('train_threads')*intconf('train_batch_size')/sum(tdmop_layer_counts))
         data_io.label_count(2)
         base_path = '%s/%s/' % (conf('upload_url'), conf('data_dir'))
         data = base_path + conf('train_sample') + '_' + r'[\d]+'
@@ -106,6 +108,8 @@ def train(is_training=True):
         data_io.batch_size(intconf('predict_batch_size'))
         data_io.epochs(intconf('predict_epochs'))
         data_io.threads(intconf('predict_threads'))
+        data_io.sgroup_queue_capacity(intconf('predict_io_pause_num') *
+                                      max(int(conf('pr_test_each_layer_retrieve_num')), int(conf('pr_test_final_layer_retrieve_num'))) * 2)
         data_io.label_count(2)
         base_path = '%s/%s/' % (conf('upload_url'), conf('data_dir'))
         data = base_path + conf('test_sample')
@@ -118,8 +122,8 @@ def train(is_training=True):
     key_value["key"] = "value"
     key_value["debug"] = conf('tdmop_debug')
     key_value["layer_counts"] = conf('tdmop_layer_counts')
-    key_value["pr_test_each_layer_retrieve_num"] = "400"
-    key_value["pr_test_final_layer_retrieve_num"] = "200"
+    key_value["pr_test_each_layer_retrieve_num"] = conf("pr_test_each_layer_retrieve_num")
+    key_value["pr_test_final_layer_retrieve_num"] = conf("pr_test_final_layer_retrieve_num")
     iop.init(key_value)
     data_io.add_op(iop)
     data_io.split_group(False)
@@ -155,6 +159,9 @@ def train(is_training=True):
         emb.append(eb_take)
     #emb_name = "unit_id_expand_emb"
     unit_id_expand_emb = xdl.embedding(emb_name, batch["unit_id_expand"], xdl.Normal(stddev=0.001), emb_dim, 50000, emb_combiner, vtype="hash", feature_add_probability=feature_add_probability)
+
+    args = list()
+    auxs = list()
 
     @xdl.mxnet_wrapper(is_training=is_training, device_type='gpu')
     def dnn_model_define(user_input, indicator, unit_id_emb, label, bs, eb_dim, fea_groups, active_op='prelu', use_batch_norm=True):
@@ -231,6 +238,10 @@ def train(is_training=True):
         ph_label_click = mx.sym.reshape(ph_label_click, shape=(bs, ))
     
         prop = mx.symbol.SoftmaxOutput(data=dout, label=ph_label_click, grad_scale=1.0, use_ignore=True, normalization='valid')
+        xdl.graph_tag().set_mx_output(prop)    # 用于导出模型配置
+        args.extend(prop.list_arguments())
+        auxs.extend(prop.list_auxiliary_states())
+
         origin_loss = mx.sym.log(prop) * label
         ph_label_sum = mx.sym.reshape(ph_label_sum, shape=(bs, 1))
         origin_loss = mx.sym.broadcast_mul(origin_loss, ph_label_sum)
@@ -293,7 +304,6 @@ def train(is_training=True):
             #print 'batch_size = %d, qps = %f batch/s' % (data_io._batch_size, (loop_num - statis_begin_loop) / elapsed_time)
 
     if is_training:
-        xdl.execute(xdl.ps_synchronize_leave_op(np.array(xdl.get_task_index(), dtype=np.int32)))
         if xdl.get_task_index() == 0:
             print 'start put item_emb'
             def _string_to_int8(src):
@@ -309,9 +319,19 @@ def train(is_training=True):
             shell_cmd("sed -i 's/..//' data/item_emb")
             shell_cmd("hadoop fs -put -f data/item_emb %s" % output_dir)
             print 'finish put item_emb'
-        #print 'before worker barrier'
-        #xdl.execute(xdl.worker_barrier_op(np.array(xdl.get_task_index(), dtype=np.int32), np.array(xdl.get_task_num(), dtype=np.int32)))
-        #print 'after worker barrier'
+
+            is_export = False
+            if is_export:
+                print 'start export'
+                from xdl.python.utils.config import get_ckpt_dir
+                from xdl.python.training.export import export_sparse, export_dense_mx
+                export_dir='hdfs://your/hdfs/path/tdm_mock/export'
+                export_sparse(get_ckpt_dir(), export_dir, ['item_emb'], 'hash')
+                export_dense_mx(get_ckpt_dir(), args, auxs, export_dir)
+                xdl.graph_tag().set_input(data_io)
+                saver = xdl.Saver(get_ckpt_dir())
+                saver.export_graph(export_dir, True)
+                print 'finish export, export_dir=%s' % export_dir
 
 train(is_training=True)
 #train(is_training=False)
