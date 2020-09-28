@@ -311,11 +311,6 @@ def get_variable_by_name(name):
     if x.name == name:
       return x
 
-def get_variable_by_prefix(prefix):
-    for x in global_variables():
-        if x.name.startswith(prefix):
-            yield x
-
 @register_converter(Variable, 0)
 def variable_to_tensor(var):
   return var.value
