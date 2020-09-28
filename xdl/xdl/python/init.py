@@ -25,7 +25,7 @@ from xdl.python.lib.graph import Graph, execute, execute_loop, execute_loop_wait
 from xdl.python.lib.tensor import Tensor, convert_to_tensor
 from xdl.python.framework.gradient import def_gradient, def_gradient_internal, gradient, get_sparse_grads
 from xdl.python.framework.session import Session, Hook
-from xdl.python.framework.variable import Variable, trainable_variables, global_variables, global_initializers, variable_registers, get_variable_by_name, get_variable_by_prefix
+from xdl.python.framework.variable import Variable, trainable_variables,trainable_variables_with_variable_scope, trainable_variables_with_variable_scopes, global_variables, global_initializers, variable_registers, get_variable_by_name, get_variable_by_prefix
 from xdl.python.framework.pulsing_runner import PulsingRunner
 from xdl.python.sparse_engine.base import SparseTensor, MergedSparseTensor
 from xdl.python.sparse_engine.embedding import embedding, merged_embedding
